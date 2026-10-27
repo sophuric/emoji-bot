@@ -11,12 +11,13 @@ let guild: Guild;
 
 const emojiRegex = /(?:\bhttps?:\/\/cdn\.discordapp\.com\/emojis\/(\d+).webp(?:\?(?:[^\s&]*&)*(?:name=(\w+)))?\b)|(?:<a?:(\w+):(\d+)>)/g;
 const idRegex = /^\d+$/;
+const messageRegex = /^https?\:\/\/(?:canary\.|ptb\.)?discord\.com\/channels\/\d+\/\d+\/(\d+)\/?(?:[#?].*)?$|^(\d+)$/;
 
 export default <Command>{
 	data: new SlashCommandBuilder()
 		.setName("react")
 		.setDescription("React to a message with emojis")
-		.addStringOption(o => o.setName("message").setDescription("Message ID").setRequired(true))
+		.addStringOption(o => o.setName("message").setDescription("Message ID or URL").setRequired(true))
 		.addStringOption(o => o.setName("emojis").setDescription("String of emojis to react with").setMinLength(5).setRequired(true))
 		.setContexts(InteractionContextType.BotDM, InteractionContextType.Guild, InteractionContextType.PrivateChannel),
 	ready: async client => {
@@ -28,7 +29,7 @@ export default <Command>{
 		channel: PermissionFlagsBits.AddReactions | PermissionFlagsBits.UseExternalEmojis | PermissionFlagsBits.ViewChannel
 	},
 	execute: async (interaction, { reply }) => {
-		const messageID = interaction.options.getString("message")!;
+		const messageURL = interaction.options.getString("message")!;
 		const emojisStr = interaction.options.getString("emojis")!;
 
 		if (!interaction.channel) {
@@ -39,6 +40,13 @@ export default <Command>{
 		await interaction.channel.fetch();
 
 		let message;
+		const messageMatch = messageURL.match(messageRegex);
+		const messageID = messageMatch && (messageMatch[1] || messageMatch[2]);
+		if (!messageID) {
+			await reply({ content: "Invalid message URL/ID" });
+			return;
+		}
+
 		try {
 			message = await interaction.channel.messages.fetch(messageID);
 		} catch {
