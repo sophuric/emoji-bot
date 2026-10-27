@@ -7,6 +7,8 @@ dotenv.config();
 const { TOKEN: token } = process.env;
 if (!token) throw new Error("Missing TOKEN");
 
+console.log("Loading...");
+
 const client = new Client({
 	allowedMentions: {
 		parse: [],
@@ -91,7 +93,6 @@ client.once(Events.ClientReady, async readyClient => {
 					await reply({ content: "There was an error while executing this command!" });
 				}
 			}
-
 		}
 
 
@@ -106,4 +107,4 @@ client.once(Events.ClientReady, async readyClient => {
 });
 
 client.login(token);
-console.log("Ready");
+console.log("Connecting...");

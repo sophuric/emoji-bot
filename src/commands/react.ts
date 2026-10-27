@@ -1,6 +1,6 @@
 import dotenv from "dotenv";
 import { type Command } from "../commands.js";
-import { Guild, InteractionContextType, MessageFlags, PermissionFlagsBits, SlashCommandBuilder } from "discord.js";
+import { Guild, GuildEmoji, InteractionContextType, MessageFlags, MessageReaction, PermissionFlagsBits, ReactionCollector, SlashCommandBuilder } from "discord.js";
 
 dotenv.config();
 
@@ -48,67 +48,114 @@ export default <Command>{
 
 		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-		const emojisToReact = [];
-		let matched = 0;
-		// match emojis in string
-		for (let match; match = emojiRegex.exec(emojisStr);) {
-			const emojiName = match[2] || match[3];
-			const emojiID = match[1] || match[4];
+		const addedEmojis: (GuildEmoji | null)[] = [];
+		const addedReactions: MessageReaction[] = [];
+		let collector: ReactionCollector | undefined;
 
-			if (!emojiID || !emojiID.match(idRegex)) continue;
+		let err;
+		try {
+			await (async () => {
+				// match emojis in string
+				const addEmojis = [];
+				for (let match; match = emojiRegex.exec(emojisStr);) {
+					const emojiID = match[1] || match[4];
 
-			const emojis = await guild.emojis.fetch();
+					if (!emojiID || !emojiID.match(idRegex)) continue;
 
-			// find already existing emoji in our server
-			let existingEmoji = emojis.values().find(emoji => emoji.name == emojiID && emoji.author?.id == interaction.client.user.id);
-			if (!existingEmoji) {
-				try {
-					// create emoji for this emoji
-					existingEmoji = await guild.emojis.create({
-						attachment: `https://cdn.discordapp.com/emojis/${emojiID}.webp?animated=true&size=4096&lossless=true`,
-						name: emojiID // easier lookup of existing emojis
-					});
-				} catch (err) {
-					await reply({ content: "Failed to add emoji to server" });
+					const emojiName = match[2] || match[3] || emojiID;
+
+					addEmojis.push({ emojiID, emojiName });
+				};
+
+				if (addEmojis.length < 1) {
+					await reply({ content: "No emojis supplied" });
 					return;
 				}
-			}
 
-			emojisToReact.push(existingEmoji);
-			++matched;
-		}
-
-		if (matched == 0) {
-			await reply({ content: "No emojis supplied" });
-			return;
-		}
-
-		const reactions = [];
-		try {
-			// collect emojis that users react with, and remove our own reaction
-			const collector = message.createReactionCollector({
-				time: 30_000,
-				filter: async (reaction, user) => {
-					const hasMyReaction = (await reaction.users.fetch()).has(interaction.client.user.id);
-					const hasOtherReaction = !user.bot && user.id != interaction.client.user.id;
-					return hasMyReaction && hasOtherReaction;
+				if (addEmojis.length > 5) {
+					await reply({ content: "Max 5 emojis at a time" });
+					return;
 				}
-			});
-			collector.on("collect", r => r.users.remove(interaction.client.user));
 
-			// add reactions
-			for (const emoji of emojisToReact) {
-				const reaction = await message.react(emoji);
-				reactions.push(reaction);
-			}
-			await reply({ content: `Reacted with ${reactions.length} emojis!` });
+				for (const { emojiID, emojiName } of addEmojis) {
+					try {
+						// create emoji for this emoji
+						const newEmoji = await guild.emojis.create({
+							attachment: `https://cdn.discordapp.com/emojis/${emojiID}.webp?animated=true&size=4096&lossless=true`,
+							name: emojiName // easier lookup of existing emojis
+						});
+						addedEmojis.push(newEmoji);
+					} catch (err) {
+						await reply({ content: "Failed to add emoji to server" });
+						return;
+					}
+				}
 
-			await new Promise(resolve => collector.once("end", resolve));
-			await Promise.all(reactions.map(reaction => reaction.users.remove(interaction.client.user)));
-		} catch (err) {
-			await Promise.all(reactions.map(reaction => reaction.users.remove(interaction.client.user)));
-			await reply({ content: "Failed to react" });
-			return;
+				try {
+					// collect emojis that users react with, and remove our own reaction
+					collector = message.createReactionCollector({
+						filter: async (reaction, user) => {
+							const hasMyReaction = (await reaction.users.fetch()).has(interaction.client.user.id);
+							const hasOtherReaction = !user.bot && user.id != interaction.client.user.id;
+							return hasMyReaction && hasOtherReaction;
+						}
+					});
+					collector.on("collect", r => r.users.remove(interaction.client.user));
+
+					// add reactions
+					for (let i = 0; i < addedEmojis.length; ++i) {
+						const emoji = addedEmojis[i];
+						if (!emoji) continue;
+
+						const reaction = await message.react(emoji);
+						addedReactions.push(reaction);
+					}
+					await reply({ content: `Reacted with ${addedReactions.length} emojis!\nPlease react with these emojis yourself.\n# ` +
+								addedEmojis.join(" ") });
+
+					// wait 30 seconds for user to add their reactions
+					collector.options.time = 30_000;
+					collector.resetTimer();
+
+					// remove our emojis in the meantime
+					await Promise.all([
+						async () => {
+							for (let i = 0; i < addedEmojis.length; ++i) {
+								const emoji = addedEmojis[i];
+								if (!emoji) continue;
+								await emoji.delete();
+								console.log("deleting emoji:", `${emoji}`);
+								addedEmojis[i] = null; // avoid deleting twice
+							}
+						},
+						new Promise(resolve => {
+							if (!collector) {
+								resolve(null);
+								return;
+							}
+							collector.once("end", resolve);
+						})
+					]);
+				} catch (err) {
+					await reply({ content: "Failed to react" });
+					return;
+				}
+			})();
+		} catch (err_) {
+			err = err_;
 		}
+
+		if (collector) collector.stop();
+
+		// remove remaining emojis and reactions
+		await Promise.all([
+			...addedReactions.map(reaction => reaction.users.remove(interaction.client.user)),
+			...addedEmojis.map(emoji => {
+				if (!emoji) return;
+				emoji.delete();
+			})
+		]);
+
+		if (err) throw err;
 	}
 };
