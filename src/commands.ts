@@ -1,8 +1,20 @@
-import { CommandInteraction, SlashCommandBuilder } from "discord.js";
+import { ChatInputCommandInteraction, Client, type InteractionReplyOptions, SlashCommandBuilder, type InteractionEditReplyOptions, InteractionResponse, Message, type PermissionResolvable, type Interaction } from "discord.js";
 
 export interface Command {
 	data: SlashCommandBuilder;
-	execute: (interaction: CommandInteraction) => Promise<void> | void;
+	ready?: (client: Client<true>) => Promise<void> | void;
+	requires?: {
+		guild?: PermissionResolvable,
+		channel?: PermissionResolvable,
+		custom?: (interaction: ChatInputCommandInteraction) => boolean,
+	};
+	execute: (
+		interaction: ChatInputCommandInteraction,
+		ctx: {
+			reply: (options: InteractionReplyOptions & InteractionEditReplyOptions) => Promise<Message<boolean> | InteractionResponse<boolean>>,
+			flags: InteractionReplyOptions["flags"]
+		}
+	) => Promise<void> | void;
 }
 
 import reactCommand from "./commands/react.js";
