@@ -24,6 +24,14 @@ export default <Command>{
 		const g = client.guilds.resolve(guildId);
 		if (!g) throw new Error(`Cannot resolve guild ${guildId}`);
 		guild = g;
+
+		const emojis = await guild.emojis.fetch();
+		const leftoverEmojis = emojis.filter(e => e?.author?.id == client.user.id);
+
+		for (const emoji of leftoverEmojis.values()) {
+			console.log(`Deleting leftover emoji ${emoji}...`);
+			await emoji.delete();
+		}
 	},
 	requires: {
 		channel: PermissionFlagsBits.AddReactions | PermissionFlagsBits.UseExternalEmojis | PermissionFlagsBits.ViewChannel
@@ -127,15 +135,14 @@ export default <Command>{
 
 					// remove our emojis in the meantime
 					await Promise.all([
-						async () => {
+						(async () => {
 							for (let i = 0; i < addedEmojis.length; ++i) {
 								const emoji = addedEmojis[i];
 								if (!emoji) continue;
 								await emoji.delete();
-								console.log("deleting emoji:", `${emoji}`);
 								addedEmojis[i] = null; // avoid deleting twice
 							}
-						},
+						})(),
 						new Promise(resolve => {
 							if (!collector) {
 								resolve(null);

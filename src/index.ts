@@ -30,13 +30,15 @@ const client = new Client({
 const flags = MessageFlags.Ephemeral | MessageFlags.SuppressEmbeds;
 
 client.once(Events.ClientReady, async readyClient => {
-	console.log(`Ready! ${readyClient.user.tag}`);
+	console.log(`Client ready ${readyClient.user.tag}`);
 
 	await Promise.all(Object.values(commands).map(async command => {
 		if (command.ready) {
 			await command.ready(readyClient);
 		}
 	}));
+
+	console.log(`Ready!`);
 
 	client.on(Events.InteractionCreate, async interaction => {
 		if (!interaction.isChatInputCommand()) return;
