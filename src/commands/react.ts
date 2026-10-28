@@ -38,7 +38,7 @@ export default <Command>{
 		const emojisStr = interaction.options.getString("emojis")!;
 
 		if (!interaction.channel) {
-			await reply("Must be in a channel");
+			await reply("Cannot get current channel");
 			return;
 		}
 
