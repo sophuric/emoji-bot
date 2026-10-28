@@ -18,10 +18,12 @@ export interface Command {
 
 import reactCommand from "./commands/react.js";
 import logChannelCommand from "./commands/logChannel.js";
+import aboutCommand from "./commands/about.js";
 
 export const commands = [
 	reactCommand,
-	logChannelCommand
+	logChannelCommand,
+	aboutCommand
 ]
 	.reduce((acc: {[name: string]: Command}, command) => {
 		acc[command.data.name] = command;

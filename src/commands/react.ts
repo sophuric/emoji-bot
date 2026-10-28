@@ -19,7 +19,7 @@ export default <Command>{
 		.setName("react")
 		.setDescription("React to a message with emojis")
 		.addStringOption(o => o.setName("message").setDescription("Message ID or URL").setRequired(true))
-		.addStringOption(o => o.setName("emojis").setDescription(`URLs or IDs of emojis to react with (max ${maxEmojis})`).setMinLength(5).setRequired(true))
+		.addStringOption(o => o.setName("emojis").setDescription(`IDs or URLs of emojis to react with (max ${maxEmojis})`).setMinLength(5).setRequired(true))
 		.setDefaultMemberPermissions(PermissionFlagsBits.AddReactions | PermissionFlagsBits.UseExternalEmojis | PermissionFlagsBits.ViewChannel)
 		.setContexts(InteractionContextType.BotDM, InteractionContextType.Guild),
 	ready: async client => {
