@@ -150,7 +150,7 @@ export default <Command>{
 						addedReactions.push(reaction);
 					}
 
-					const timeout = 10_000;
+					const timeout = 60_000;
 					await reply(`Reacted with ${addedReactions.length} emojis!\nPlease react with these emojis yourself.\n` +
 								`-# expires ${time(Math.floor((Date.now() + timeout) / 1000), TimestampStyles.RelativeTime)}\n# ` +
 								addedEmojis.join(" "));
