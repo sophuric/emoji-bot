@@ -11,7 +11,7 @@ export interface Command {
 	execute: (
 		interaction: ChatInputCommandInteraction,
 		ctx: {
-			reply: (options: InteractionReplyOptions & InteractionEditReplyOptions) => Promise<Message<boolean> | InteractionResponse<boolean>>,
+			reply: (options: InteractionReplyOptions & InteractionEditReplyOptions) => Promise<Message<boolean> | InteractionResponse<boolean> | null>,
 			flags: InteractionReplyOptions["flags"]
 		}
 	) => Promise<void> | void;

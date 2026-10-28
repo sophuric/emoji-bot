@@ -38,7 +38,7 @@ client.once(Events.ClientReady, async readyClient => {
 		}
 	}));
 
-	console.log(`Ready!`);
+	console.log("Ready!");
 
 	client.on(Events.InteractionCreate, async interaction => {
 		if (!interaction.isChatInputCommand()) return;
@@ -47,14 +47,19 @@ client.once(Events.ClientReady, async readyClient => {
 		if (!command) return;
 
 		const reply = async function(options: InteractionReplyOptions & InteractionEditReplyOptions) {
-			if (options.flags == null) options.flags = flags;
-			if (interaction.deferred) {
-				return await interaction.editReply(options);
+			try {
+				if (options.flags == null) options.flags = flags;
+				if (interaction.deferred) {
+					return await interaction.editReply(options);
+				}
+				if (interaction.replied) {
+					return await interaction.followUp(options);
+				}
+				return await interaction.reply(options);
+			} catch (err) {
+				console.log(err);
+				return null;
 			}
-			if (interaction.replied) {
-				return await interaction.followUp(options);
-			}
-			return await interaction.reply(options);
 		};
 
 		if (interaction.guild) {

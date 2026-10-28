@@ -1,6 +1,6 @@
 import dotenv from "dotenv";
 import { type Command } from "../commands.js";
-import { Guild, GuildEmoji, InteractionContextType, MessageFlags, MessageReaction, PermissionFlagsBits, ReactionCollector, SlashCommandBuilder } from "discord.js";
+import { Guild, GuildEmoji, InteractionContextType, MessageFlags, MessageReaction, PermissionFlagsBits, ReactionCollector, SlashCommandBuilder, time, TimestampStyles, type UserResolvable } from "discord.js";
 
 dotenv.config();
 
@@ -11,7 +11,10 @@ let guild: Guild;
 
 const emojiRegex = /(?:\bhttps?:\/\/cdn\.discordapp\.com\/emojis\/(\d+).webp(?:\?(?:[^\s&]*&)*(?:name=(\w+)))?\b)|(?:<a?:(\w+):(\d+)>)/g;
 const idRegex = /^\d+$/;
-const messageRegex = /^https?\:\/\/(?:canary\.|ptb\.)?discord\.com\/channels\/\d+\/\d+\/(\d+)\/?(?:[#?].*)?$|^(\d+)$/;
+const messageRegex = /^https?\:\/\/(?:canary\.|ptb\.)?discord\.com\/channels\/(\d+|@me)\/(\d+)\/(\d+)\/?(?:[#?].*)?$|^(\d+)$/;
+const dmString = "@me";
+
+const cooldown = new Set<UserResolvable>();
 
 export default <Command>{
 	data: new SlashCommandBuilder()
@@ -49,9 +52,23 @@ export default <Command>{
 
 		let message;
 		const messageMatch = messageURL.match(messageRegex);
-		const messageID = messageMatch && (messageMatch[1] || messageMatch[2]);
+		const messageID = messageMatch && (messageMatch[3] || messageMatch[4]);
 		if (!messageID) {
 			await reply({ content: "Invalid message URL/ID" });
+			return;
+		}
+
+		if (messageMatch[1] && messageMatch[1] != (interaction.guild ? interaction.guild.id : dmString)) {
+			await reply({ content: "The message link is from a " + (
+				(messageMatch[1] == dmString && interaction.guild) ? "DM" :
+					(messageMatch[1] != dmString && !interaction.guild) ? "server" :
+						"different server") });
+			return;
+		}
+
+		if (messageMatch[2] && messageMatch[2] != interaction.channel.id) {
+			await reply({ content: "The message link is from a different " +
+						(interaction.guild ? "channel" : "DM") });
 			return;
 		}
 
@@ -65,11 +82,19 @@ export default <Command>{
 		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
 		const addedEmojis: (GuildEmoji | null)[] = [];
-		const addedReactions: MessageReaction[] = [];
+		const addedReactions: (MessageReaction | null)[] = [];
 		let collector: ReactionCollector | undefined;
 
+		if (cooldown.has(interaction.user.id)) {
+			await reply({ content: "You are currently in cooldown. Please wait before trying again." });
+			return;
+		}
+
 		let err;
+		let sentReactedMessage = false;
 		try {
+			cooldown.add(interaction.user.id);
+
 			await (async () => {
 				// match emojis in string
 				const addEmojis = [];
@@ -116,7 +141,7 @@ export default <Command>{
 							return hasMyReaction && hasOtherReaction;
 						}
 					});
-					collector.on("collect", r => r.users.remove(interaction.client.user));
+					collector.on("collect", r => r.users.remove());
 
 					// add reactions
 					for (let i = 0; i < addedEmojis.length; ++i) {
@@ -126,30 +151,29 @@ export default <Command>{
 						const reaction = await message.react(emoji);
 						addedReactions.push(reaction);
 					}
-					await reply({ content: `Reacted with ${addedReactions.length} emojis!\nPlease react with these emojis yourself.\n# ` +
+
+					const timeout = 10_000;
+					await reply({ content: `Reacted with ${addedReactions.length} emojis!\nPlease react with these emojis yourself.\n` +
+								`-# expires ${time(Math.floor((Date.now() + timeout) / 1000), TimestampStyles.RelativeTime)}\n# ` +
 								addedEmojis.join(" ") });
+					sentReactedMessage = true;
 
 					// wait 30 seconds for user to add their reactions
-					collector.options.time = 30_000;
-					collector.resetTimer();
-
 					// remove our emojis in the meantime
 					await Promise.all([
 						(async () => {
 							for (let i = 0; i < addedEmojis.length; ++i) {
 								const emoji = addedEmojis[i];
 								if (!emoji) continue;
-								await emoji.delete();
-								addedEmojis[i] = null; // avoid deleting twice
+								try {
+									await emoji.delete();
+									addedEmojis[i] = null;
+								} catch {}
 							}
 						})(),
-						new Promise(resolve => {
-							if (!collector) {
-								resolve(null);
-								return;
-							}
-							collector.once("end", resolve);
-						})
+						// not using reaction collector timeout here because we can't control when the timeout starts
+						// we don't want to start the timer until after we have reacted
+						await new Promise(res => setTimeout(res, timeout))
 					]);
 				} catch (err) {
 					await reply({ content: "Failed to react" });
@@ -158,18 +182,39 @@ export default <Command>{
 			})();
 		} catch (err_) {
 			err = err_;
+			sentReactedMessage = false;
 		}
 
 		if (collector) collector.stop();
 
 		// remove remaining emojis and reactions
-		await Promise.all([
-			...addedReactions.map(reaction => reaction.users.remove(interaction.client.user)),
-			...addedEmojis.map(emoji => {
-				if (!emoji) return;
-				emoji.delete();
-			})
-		]);
+		if (sentReactedMessage) {
+			reply({
+				content: "Removing leftover reactions and temporary emojis..."
+			});
+		}
+		for (let i = 0; i < addedEmojis.length; ++i) {
+			const emoji = addedEmojis[i];
+			if (!emoji) continue;
+			try {
+				await emoji.delete();
+				addedEmojis[i] = null;
+			} catch {}
+		}
+		for (let i = 0; i < addedReactions.length; ++i) {
+			const reaction = addedReactions[i];
+			if (!reaction) continue;
+			try {
+				await reaction.users.remove();
+				addedReactions[i] = null;
+			} catch {}
+		}
+		if (sentReactedMessage) {
+			reply({
+				content: "Finished!"
+			});
+		}
+		cooldown.delete(interaction.user.id);
 
 		if (err) throw err;
 	}
