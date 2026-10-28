@@ -5,19 +5,21 @@ import { getLogChannel } from "./logChannel.js";
 
 let guild: Guild;
 
-const emojiRegex = /(?:\bhttps?:\/\/cdn\.discordapp\.com\/emojis\/(\d+).(?:png|gif|webp|jpg|jpeg|jfif)(?:\?(?:[^\s&]*&)*(?:name=(\w+)))?\b)|(?:<a?:(\w+):(\d+)>)/g;
+const emojiRegex = /(?:\bhttps?:\/\/cdn\.discordapp\.com\/emojis\/(\d+).(?:png|gif|webp|jpg|jpeg|jfif)(?:\?(?:[^\s&]*&)*(?:name=(\w+)))?\b)|(?:<a?:(\w+):(\d+)>)|\b(\d{8,})\b/g;
 const idRegex = /^\d+$/;
 const messageRegex = /^https?\:\/\/(?:canary\.|ptb\.)?discord\.com\/channels\/(\d+|@me)\/(\d+)\/(\d+)\/?(?:[#?].*)?$|^(\d+)$/;
 const dmString = "@me";
 
 const cooldown = new Set<UserResolvable>();
 
+const maxEmojis = 5;
+
 export default <Command>{
 	data: new SlashCommandBuilder()
 		.setName("react")
 		.setDescription("React to a message with emojis")
 		.addStringOption(o => o.setName("message").setDescription("Message ID or URL").setRequired(true))
-		.addStringOption(o => o.setName("emojis").setDescription("String of emojis to react with").setMinLength(5).setRequired(true))
+		.addStringOption(o => o.setName("emojis").setDescription(`URLs or IDs of emojis to react with (max ${maxEmojis})`).setMinLength(5).setRequired(true))
 		.setDefaultMemberPermissions(PermissionFlagsBits.AddReactions | PermissionFlagsBits.UseExternalEmojis | PermissionFlagsBits.ViewChannel)
 		.setContexts(InteractionContextType.BotDM, InteractionContextType.Guild),
 	ready: async client => {
@@ -93,7 +95,7 @@ export default <Command>{
 				// match emojis in string
 				const addEmojis = [];
 				for (let match; match = emojiRegex.exec(emojisStr);) {
-					const emojiID = match[1] || match[4];
+					const emojiID = match[1] || match[4] || match[5];
 
 					if (!emojiID || !emojiID.match(idRegex)) continue;
 
@@ -107,8 +109,8 @@ export default <Command>{
 					return;
 				}
 
-				if (addEmojis.length > 5) {
-					await reply("Max 5 emojis at a time");
+				if (addEmojis.length > maxEmojis) {
+					await reply(`Max ${maxEmojis} emojis at a time`);
 					return;
 				}
 
