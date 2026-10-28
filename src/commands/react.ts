@@ -1,15 +1,11 @@
-import dotenv from "dotenv";
 import { type Command } from "../commands.js";
 import { Guild, GuildEmoji, InteractionContextType, MessageFlags, MessageReaction, PermissionFlagsBits, ReactionCollector, SlashCommandBuilder, time, TimestampStyles, type UserResolvable } from "discord.js";
-
-dotenv.config();
-
-const { GUILD_ID: guildId } = process.env;
-if (!guildId) throw new Error("Missing GUILD_ID");
+import { guildId } from "../var.js";
+import { getLogChannel } from "./logChannel.js";
 
 let guild: Guild;
 
-const emojiRegex = /(?:\bhttps?:\/\/cdn\.discordapp\.com\/emojis\/(\d+).(?:png|gif|webp)(?:\?(?:[^\s&]*&)*(?:name=(\w+)))?\b)|(?:<a?:(\w+):(\d+)>)/g;
+const emojiRegex = /(?:\bhttps?:\/\/cdn\.discordapp\.com\/emojis\/(\d+).(?:png|gif|webp|jpg|jpeg|jfif)(?:\?(?:[^\s&]*&)*(?:name=(\w+)))?\b)|(?:<a?:(\w+):(\d+)>)/g;
 const idRegex = /^\d+$/;
 const messageRegex = /^https?\:\/\/(?:canary\.|ptb\.)?discord\.com\/channels\/(\d+|@me)\/(\d+)\/(\d+)\/?(?:[#?].*)?$|^(\d+)$/;
 const dmString = "@me";
@@ -23,7 +19,7 @@ export default <Command>{
 		.addStringOption(o => o.setName("message").setDescription("Message ID or URL").setRequired(true))
 		.addStringOption(o => o.setName("emojis").setDescription("String of emojis to react with").setMinLength(5).setRequired(true))
 		.setDefaultMemberPermissions(PermissionFlagsBits.AddReactions | PermissionFlagsBits.UseExternalEmojis | PermissionFlagsBits.ViewChannel)
-		.setContexts(InteractionContextType.BotDM, InteractionContextType.Guild, InteractionContextType.PrivateChannel),
+		.setContexts(InteractionContextType.BotDM, InteractionContextType.Guild),
 	ready: async client => {
 		const g = client.guilds.resolve(guildId);
 		if (!g) throw new Error(`Cannot resolve guild ${guildId}`);
@@ -46,8 +42,6 @@ export default <Command>{
 			return;
 		}
 
-		await interaction.channel.fetch();
-
 		let message;
 		const messageMatch = messageURL.match(messageRegex);
 		const messageID = messageMatch && (messageMatch[3] || messageMatch[4]);
@@ -57,7 +51,7 @@ export default <Command>{
 		}
 
 		if (messageMatch[1] && messageMatch[1] != (interaction.guild ? interaction.guild.id : dmString)) {
-			await reply("The message link is from a " + (
+			await reply("That message link is from a " + (
 				(messageMatch[1] == dmString && interaction.guild) ? "DM" :
 					(messageMatch[1] != dmString && !interaction.guild) ? "server" :
 						"different server"));
@@ -65,7 +59,7 @@ export default <Command>{
 		}
 
 		if (messageMatch[2] && messageMatch[2] != interaction.channel.id) {
-			await reply("The message link is from a different " +
+			await reply("That message link is from a different " +
 						(interaction.guild ? "channel" : "DM"));
 			return;
 		}
@@ -82,6 +76,8 @@ export default <Command>{
 		const addedEmojis: (GuildEmoji | null)[] = [];
 		const addedReactions: (MessageReaction | null)[] = [];
 		let collector: ReactionCollector | undefined;
+
+		const logChannel = await getLogChannel(interaction.guild);
 
 		if (cooldown.has(interaction.user.id)) {
 			await reply("You are currently in cooldown. Please wait before trying again.");
@@ -130,6 +126,16 @@ export default <Command>{
 					}
 				}
 
+				if (logChannel) {
+					try {
+						await logChannel.send(`${interaction.user} is reacting to ${message.url} with these emojis:\n` +
+											 `# ${addedEmojis.join(" ")}`);
+					} catch (error) {
+						await reply("Failed to log");
+						throw error;
+					}
+				}
+
 				try {
 					// collect emojis that users react with, and remove our own reaction
 					collector = message.createReactionCollector({
@@ -152,8 +158,8 @@ export default <Command>{
 
 					const timeout = 60_000;
 					await reply(`Reacted with ${addedReactions.length} emojis!\nPlease react with these emojis yourself.\n` +
-								`-# expires ${time(Math.floor((Date.now() + timeout) / 1000), TimestampStyles.RelativeTime)}\n# ` +
-								addedEmojis.join(" "));
+								`-# Expires ${time(Math.floor((Date.now() + timeout) / 1000), TimestampStyles.RelativeTime)}.\n` +
+								`# ${addedEmojis.join(" ")}`);
 					sentReactedMessage = true;
 
 					// wait 30 seconds for user to add their reactions

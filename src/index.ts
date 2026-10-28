@@ -1,11 +1,6 @@
-import dotenv from "dotenv";
-import { ChannelType, Client, Events, GatewayIntentBits, MessageFlags, Partials, PermissionsBitField, type InteractionEditReplyOptions, type InteractionReplyOptions } from "discord.js";
-import { commands, type Command, type ReplyFunction } from "./commands.js";
-
-dotenv.config();
-
-const { TOKEN: token } = process.env;
-if (!token) throw new Error("Missing TOKEN");
+import { ChannelType, Client, Events, GatewayIntentBits, GuildMember, MessageFlags, Partials, PermissionsBitField, type GuildResolvable, type InteractionEditReplyOptions, type InteractionReplyOptions, type PermissionResolvable, type Snowflake } from "discord.js";
+import { commands, type CheckPermissionsFunction, type Command, type ReplyFunction } from "./commands.js";
+import { messageFlags, throw_, token } from "./var.js";
 
 console.log("Loading...");
 
@@ -19,22 +14,24 @@ const client = new Client({
 	intents: [
 		GatewayIntentBits.Guilds,
 		GatewayIntentBits.GuildMessageReactions,
-		GatewayIntentBits.GuildExpressions
+		GatewayIntentBits.GuildExpressions,
+		GatewayIntentBits.DirectMessageReactions
 	],
 	partials: [
 		Partials.Channel,
-		Partials.Message
+		Partials.Message,
+		Partials.Reaction
 	]
 });
 
-const flags = MessageFlags.Ephemeral | MessageFlags.SuppressEmbeds;
+client.once(Events.ClientReady, async () => {
+	if (!client.isReady()) throw new Error("Received ClientReady but !client.isReady()");
 
-client.once(Events.ClientReady, async readyClient => {
-	console.log(`Client ready ${readyClient.user.tag}`);
+	console.log(`Client ready! ${client.user.tag}`);
 
 	await Promise.all(Object.values(commands).map(async command => {
 		if (command.ready) {
-			await command.ready(readyClient);
+			await command.ready(client);
 		}
 	}));
 
@@ -50,12 +47,9 @@ client.once(Events.ClientReady, async readyClient => {
 			if (typeof options == "string") options = { content: options };
 
 			try {
-				if (options.flags == null) options.flags = flags;
-				if (interaction.deferred) {
+				if (!options.hasOwnProperty("flags")) options.flags = messageFlags;
+				if (interaction.replied || interaction.deferred) {
 					return await interaction.editReply(options);
-				}
-				if (interaction.replied) {
-					return await interaction.followUp(options);
 				}
 				return await interaction.reply(options);
 			} catch (err) {
@@ -64,16 +58,41 @@ client.once(Events.ClientReady, async readyClient => {
 			}
 		};
 
-		if (interaction.guild) {
-			await interaction.guild.fetch();
+		async function checkPermissionsFunc(member: GuildMember | null | undefined, requiredPermissions: PermissionResolvable, str: string) {
+			if (!interaction.channel) {
+				await reply("Not in a channel");
+				return false;
+			}
+			if (!interaction.guild || interaction.channel.isDMBased()) {
+				await reply("Not in a guild");
+				return false;
+			}
+			if (!member) {
+				await reply("Missing member");
+				return false;
+			}
+			if (!member.permissionsIn(interaction.channel).has(requiredPermissions)) {
+				const missing = new PermissionsBitField(requiredPermissions);
+				missing.remove(member.permissions);
+				await reply(`${str} missing the following permissions:\n${
+					missing.toArray().map(e => `- ${e}`).join("\n")
+				}`);
+				return false;
+			}
+			return true;
+		}
+		async function checkMyPermissions(requiredPermissions: PermissionResolvable) {
+			return await checkPermissionsFunc(interaction.guild?.members.me, requiredPermissions, "The bot is");
 		}
 
-		if (interaction.channel) {
+		if (interaction.guild) {
+			if (!interaction.channel) return;
+			await interaction.guild.fetch();
 			await interaction.channel.fetch();
 		}
 
 		try {
-			await command.execute(interaction, { reply, flags });
+			await command.execute(interaction, { reply, checkMyPermissions });
 		} catch (error) {
 			console.error(error);
 

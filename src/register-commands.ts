@@ -1,13 +1,6 @@
-import dotenv from "dotenv";
-dotenv.config();
-
 import { REST, Routes } from "discord.js";
 import { commands } from "./commands.js";
-
-const { TOKEN: token, CLIENT_ID: clientId, GUILD_ID: guildId } = process.env;
-if (!token) throw new Error("Missing TOKEN");
-if (!clientId) throw new Error("Missing CLIENT_ID");
-if (!guildId) throw new Error("Missing GUILD_ID");
+import { clientId, guildId, token } from "./var.js";
 
 const rest = new REST().setToken(token);
 
