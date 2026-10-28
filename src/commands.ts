@@ -1,17 +1,14 @@
-import { ChatInputCommandInteraction, Client, type InteractionReplyOptions, SlashCommandBuilder, type InteractionEditReplyOptions, InteractionResponse, Message, type PermissionResolvable, type Interaction } from "discord.js";
+import { ChatInputCommandInteraction, Client, type InteractionReplyOptions, SlashCommandBuilder, type InteractionEditReplyOptions, InteractionResponse, Message } from "discord.js";
+
+export type ReplyFunction = (options: string | (InteractionReplyOptions & InteractionEditReplyOptions)) => Promise<Message<boolean> | InteractionResponse<boolean> | null>;
 
 export interface Command {
 	data: SlashCommandBuilder;
 	ready?: (client: Client<true>) => Promise<void> | void;
-	requires?: {
-		guild?: PermissionResolvable,
-		channel?: PermissionResolvable,
-		custom?: (interaction: ChatInputCommandInteraction) => boolean,
-	};
 	execute: (
 		interaction: ChatInputCommandInteraction,
 		ctx: {
-			reply: (options: InteractionReplyOptions & InteractionEditReplyOptions) => Promise<Message<boolean> | InteractionResponse<boolean> | null>,
+			reply: ReplyFunction,
 			flags: InteractionReplyOptions["flags"]
 		}
 	) => Promise<void> | void;

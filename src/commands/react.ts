@@ -9,7 +9,7 @@ if (!guildId) throw new Error("Missing GUILD_ID");
 
 let guild: Guild;
 
-const emojiRegex = /(?:\bhttps?:\/\/cdn\.discordapp\.com\/emojis\/(\d+).webp(?:\?(?:[^\s&]*&)*(?:name=(\w+)))?\b)|(?:<a?:(\w+):(\d+)>)/g;
+const emojiRegex = /(?:\bhttps?:\/\/cdn\.discordapp\.com\/emojis\/(\d+).(?:png|gif|webp)(?:\?(?:[^\s&]*&)*(?:name=(\w+)))?\b)|(?:<a?:(\w+):(\d+)>)/g;
 const idRegex = /^\d+$/;
 const messageRegex = /^https?\:\/\/(?:canary\.|ptb\.)?discord\.com\/channels\/(\d+|@me)\/(\d+)\/(\d+)\/?(?:[#?].*)?$|^(\d+)$/;
 const dmString = "@me";
@@ -22,6 +22,7 @@ export default <Command>{
 		.setDescription("React to a message with emojis")
 		.addStringOption(o => o.setName("message").setDescription("Message ID or URL").setRequired(true))
 		.addStringOption(o => o.setName("emojis").setDescription("String of emojis to react with").setMinLength(5).setRequired(true))
+		.setDefaultMemberPermissions(PermissionFlagsBits.AddReactions | PermissionFlagsBits.UseExternalEmojis | PermissionFlagsBits.ViewChannel)
 		.setContexts(InteractionContextType.BotDM, InteractionContextType.Guild, InteractionContextType.PrivateChannel),
 	ready: async client => {
 		const g = client.guilds.resolve(guildId);
@@ -36,15 +37,12 @@ export default <Command>{
 			await emoji.delete();
 		}
 	},
-	requires: {
-		channel: PermissionFlagsBits.AddReactions | PermissionFlagsBits.UseExternalEmojis | PermissionFlagsBits.ViewChannel
-	},
 	execute: async (interaction, { reply }) => {
 		const messageURL = interaction.options.getString("message")!;
 		const emojisStr = interaction.options.getString("emojis")!;
 
 		if (!interaction.channel) {
-			await reply({ content: "Must be in a channel" });
+			await reply("Must be in a channel");
 			return;
 		}
 
@@ -54,28 +52,28 @@ export default <Command>{
 		const messageMatch = messageURL.match(messageRegex);
 		const messageID = messageMatch && (messageMatch[3] || messageMatch[4]);
 		if (!messageID) {
-			await reply({ content: "Invalid message URL/ID" });
+			await reply("Invalid message URL/ID");
 			return;
 		}
 
 		if (messageMatch[1] && messageMatch[1] != (interaction.guild ? interaction.guild.id : dmString)) {
-			await reply({ content: "The message link is from a " + (
+			await reply("The message link is from a " + (
 				(messageMatch[1] == dmString && interaction.guild) ? "DM" :
 					(messageMatch[1] != dmString && !interaction.guild) ? "server" :
-						"different server") });
+						"different server"));
 			return;
 		}
 
 		if (messageMatch[2] && messageMatch[2] != interaction.channel.id) {
-			await reply({ content: "The message link is from a different " +
-						(interaction.guild ? "channel" : "DM") });
+			await reply("The message link is from a different " +
+						(interaction.guild ? "channel" : "DM"));
 			return;
 		}
 
 		try {
 			message = await interaction.channel.messages.fetch(messageID);
 		} catch {
-			await reply({ content: "Failed to get message" });
+			await reply("Failed to get message");
 			return;
 		}
 
@@ -86,7 +84,7 @@ export default <Command>{
 		let collector: ReactionCollector | undefined;
 
 		if (cooldown.has(interaction.user.id)) {
-			await reply({ content: "You are currently in cooldown. Please wait before trying again." });
+			await reply("You are currently in cooldown. Please wait before trying again.");
 			return;
 		}
 
@@ -109,12 +107,12 @@ export default <Command>{
 				};
 
 				if (addEmojis.length < 1) {
-					await reply({ content: "No emojis supplied" });
+					await reply("No emojis supplied");
 					return;
 				}
 
 				if (addEmojis.length > 5) {
-					await reply({ content: "Max 5 emojis at a time" });
+					await reply("Max 5 emojis at a time");
 					return;
 				}
 
@@ -127,7 +125,7 @@ export default <Command>{
 						});
 						addedEmojis.push(newEmoji);
 					} catch (err) {
-						await reply({ content: "Failed to add emoji to server" });
+						await reply("Failed to add emoji to server");
 						return;
 					}
 				}
@@ -153,9 +151,9 @@ export default <Command>{
 					}
 
 					const timeout = 10_000;
-					await reply({ content: `Reacted with ${addedReactions.length} emojis!\nPlease react with these emojis yourself.\n` +
+					await reply(`Reacted with ${addedReactions.length} emojis!\nPlease react with these emojis yourself.\n` +
 								`-# expires ${time(Math.floor((Date.now() + timeout) / 1000), TimestampStyles.RelativeTime)}\n# ` +
-								addedEmojis.join(" ") });
+								addedEmojis.join(" "));
 					sentReactedMessage = true;
 
 					// wait 30 seconds for user to add their reactions
@@ -176,7 +174,7 @@ export default <Command>{
 						await new Promise(res => setTimeout(res, timeout))
 					]);
 				} catch (err) {
-					await reply({ content: "Failed to react" });
+					await reply("Failed to react");
 					return;
 				}
 			})();
