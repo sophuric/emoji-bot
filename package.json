@@ -17,6 +17,7 @@
   "scripts": {
     "start": "node dist/index.js",
     "register": "node dist/register-commands.js",
+    "register-and-start": "node dist/register-and-start.js",
     "build": "tsc"
   },
   "devDependencies": {
